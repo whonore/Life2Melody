@@ -1,10 +1,11 @@
-#import video
+from video import Video
 from state import LifeState
 from music import Player
 
 
 def main():
-    state = LifeState([])
+    inputs = [Video()]
+    state = LifeState(inputs)
     player = Player(state)
     player.play_song()
 

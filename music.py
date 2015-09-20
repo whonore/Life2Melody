@@ -45,6 +45,7 @@ class Player():
             self.dissonance = self.state.get_dissonance()
             self.length_ratio = self.state.get_length_ratio()
 
+            print(self.tempo, self.key, self.octave, self.volume, self.dissonance, self.length_ratio)
             time.sleep(self.update_rate)
 
     def play_song(self):

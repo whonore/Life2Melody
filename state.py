@@ -19,15 +19,6 @@ VOLUME_RANGE = (70, 127)
 # Mixolydian -> Dorian (-) | Major (+) 4
 # Minor -> Phyrgian (-) | Dorian (+) 5
 # Locrian -> Locrian (-) | Phyrgian (+) 6
-SCALE_TRANSITIONS = (
-    (None, None), # Major is special case
-    (5, 4),
-    (6, 5),
-    (4, 0),
-    (1, 0),
-    (2, 1),
-    (6, 2)
-)
 
 SCALE_ORDER = (6, 2, 5, 1, 4, 3, 0)
 
@@ -37,10 +28,11 @@ class LifeState():
     def __init__(self, inputs):
         self.update_rate = 3
 
-        self.energy = [10] * BACKLOG_SIZE
-        self.disposition = [30] * BACKLOG_SIZE
-        self.chaos = [35] * BACKLOG_SIZE
+        self.energy = [0] * BACKLOG_SIZE
+        self.disposition = [0] * BACKLOG_SIZE
+        self.chaos = [0] * BACKLOG_SIZE
 
+        self.prev_idx = 0
         self.idx = 0
 
         self.inputs = inputs
@@ -54,6 +46,11 @@ class LifeState():
                 self.disposition[self.idx] = clamp(input.get_disposition_change(), *DISPOSITION_RANGE)
                 self.chaos[self.idx] = clamp(input.get_chaos_change(), *CHAOS_RANGE)
 
+            print(self.idx)
+            print('energy', self.energy)
+            print('disposition', self.disposition)
+            print('chaos', self.chaos)
+            self.prev_idx = self.idx
             self.idx = (self.idx + 1) % BACKLOG_SIZE
             time.sleep(self.update_rate)
 
@@ -61,8 +58,8 @@ class LifeState():
         # f(x) = {log(x + 1) * (240 - 90) / log(51) + 90 | x >= 0
         #         (e^(x + 50) - 1) * (90 - 60) / (e^50 - 1) + 60 | x <= 0}
 
-        cur_energy = self.energy[self.idx]
-        cur_chaos = self.chaos[self.idx]
+        cur_energy = self.energy[self.prev_idx]
+        cur_chaos = self.chaos[self.prev_idx]
 
         if cur_energy >= 0:
             tempo = (numpy.log10(cur_energy + 1)
@@ -84,7 +81,7 @@ class LifeState():
         return tempo
 
     def get_key(self, current_key): # Disposition
-        cur_idx = self.idx
+        cur_idx = self.prev_idx
         cur_disposition = self.disposition[cur_idx]
 
         d_ratio = (cur_disposition + DISPOSITION_RANGE[1]) / (DISPOSITION_RANGE[1] - DISPOSITION_RANGE[0])
@@ -125,8 +122,8 @@ class LifeState():
         return octave
 
     def get_volume(self): # Energy +/- Chaos
-        cur_energy = self.energy[self.idx]
-        cur_chaos = self.chaos[self.idx]
+        cur_energy = self.energy[self.prev_idx]
+        cur_chaos = self.chaos[self.prev_idx]
 
         e_ratio = (cur_energy + ENERGY_RANGE[1]) / (ENERGY_RANGE[1] - ENERGY_RANGE[0])
 
@@ -136,8 +133,8 @@ class LifeState():
         return int(volume)
 
     def get_dissonance(self): # Disposition
-        cur_disposition = self.disposition[cur_idx]
-        cur_chaos = self.chaos[self.idx]
+        cur_disposition = self.disposition[self.prev_idx]
+        cur_chaos = self.chaos[self.prev_idx]
 
         d_ratio = (cur_disposition + DISPOSITION_RANGE[1]) / (DISPOSITION_RANGE[1] - DISPOSITION_RANGE[0])
 
@@ -150,7 +147,7 @@ class LifeState():
         return dissonance
 
     def get_length_ratio(self): # Energy +/- Chaos
-        cur_energy = self.energy[self.idx]
+        cur_energy = self.energy[self.prev_idx]
 
         e_ratio = (cur_energy + ENERGY_RANGE[1]) / (ENERGY_RANGE[1] - ENERGY_RANGE[0])
 
