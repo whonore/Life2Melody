@@ -57,12 +57,12 @@ class Video():
                 time.sleep(remaining)
                 
     def get_energy_change(self):
-        return int(self.brightness)
+        return int(self.rbratio)
         
     def get_chaos_change(self):
         return int(self.variance)
 
     def get_disposition_change(self):
-        return int(self.rbratio)
+        return int(self.brightness)
 
 Video()
