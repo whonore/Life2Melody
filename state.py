@@ -3,7 +3,7 @@ import random
 import threading
 import time
 
-BACKLOG_SIZE = 3
+DEBUG = False
 
 ENERGY_RANGE = (-50.0, 50.0)
 DISPOSITION_RANGE = (-50.0, 50.0)
@@ -22,18 +22,20 @@ VOLUME_RANGE = (70, 127)
 
 SCALE_ORDER = (6, 2, 5, 1, 4, 3, 0)
 
+
 def clamp(val, min, max): return sorted((val, min, max))[1]
 
+
 class LifeState():
-    def __init__(self, inputs):
+    def __init__(self, inputs, debug=False):
+        global DEBUG
+        DEBUG = debug
+
         self.update_rate = 3
 
-        self.energy = [0] * BACKLOG_SIZE
-        self.disposition = [0] * BACKLOG_SIZE
-        self.chaos = [0] * BACKLOG_SIZE
-
-        self.prev_idx = 0
-        self.idx = 0
+        self.energy = 0
+        self.disposition = 0
+        self.chaos = 0
 
         self.inputs = inputs
 
@@ -41,38 +43,48 @@ class LifeState():
 
     def update(self):
         while True:
-            for input in self.inputs:
-                self.energy[self.idx] = clamp(input.get_energy_change(), *ENERGY_RANGE)
-                self.disposition[self.idx] = clamp(input.get_disposition_change(), *DISPOSITION_RANGE)
-                self.chaos[self.idx] = clamp(input.get_chaos_change(), *CHAOS_RANGE)
+            states = [(clamp(input.get_energy(), *ENERGY_RANGE),
+                       clamp(input.get_disposition(), *DISPOSITION_RANGE),
+                       clamp(input.get_chaos(), *CHAOS_RANGE))
+                      for input in self.inputs]
+            states = zip(*states)
 
-            print(self.idx)
-            print('energy', self.energy)
-            print('disposition', self.disposition)
-            print('chaos', self.chaos)
-            self.prev_idx = self.idx
-            self.idx = (self.idx + 1) % BACKLOG_SIZE
+            if not states:
+                states = [(self.energy,), (self.disposition,), (self.chaos,)]
+
+            self.energy = numpy.mean(states[0])
+            self.disposition = numpy.mean(states[1])
+            self.chaos = numpy.mean(states[2])
+
+            if DEBUG:
+                msg = ['State update',
+                       "Energy: {} ({})".format(self.energy, states[0]),
+                       "Disposition: {} ({})".format(self.disposition, states[1]),
+                       "Chaos: {} ({})".format(self.chaos, states[2]),
+                       '']
+                print('\n'.join(msg))
+
             time.sleep(self.update_rate)
 
-    def get_tempo(self, current_tempo): # Energy +/- Chaos
+    def get_tempo(self, current_tempo):  # Energy +/- Chaos
         # f(x) = {log(x + 1) * (240 - 90) / log(51) + 90 | x >= 0
         #         (e^(x + 50) - 1) * (90 - 60) / (e^50 - 1) + 60 | x <= 0}
 
-        cur_energy = self.energy[self.prev_idx]
-        cur_chaos = self.chaos[self.prev_idx]
+        cur_energy = self.energy
+        cur_chaos = self.chaos
 
         if cur_energy >= 0:
-            tempo = (numpy.log10(cur_energy + 1)
-                     * (TEMPO_RANGE[1] - 90) / numpy.log10(ENERGY_RANGE[1] + 1)
-                     + 90)
+            tempo = (numpy.log10(cur_energy + 1) *
+                     (TEMPO_RANGE[1] - 90) / numpy.log10(ENERGY_RANGE[1] + 1) +
+                     90)
         else:
-            tempo = ((numpy.exp(cur_energy + ENERGY_RANGE[1]) - 1)
-                     * (90 - TEMPO_RANGE[0]) / (numpy.exp(ENERGY_RANGE[1]) - 1)
-                     + 60)
+            tempo = ((numpy.exp(cur_energy + ENERGY_RANGE[1]) - 1) *
+                     (90 - TEMPO_RANGE[0]) / (numpy.exp(ENERGY_RANGE[1]) - 1) +
+                     60)
 
         tempo += cur_chaos / CHAOS_RANGE[1]
 
-        # Tempo can only change by at most 20
+        # Tempo can only change by at most 20 bpm
         tempo_dif = tempo - current_tempo
         if abs(tempo_dif) > 20:
             sgn = tempo_dif / abs(tempo_dif)
@@ -80,11 +92,11 @@ class LifeState():
 
         return tempo
 
-    def get_key(self, current_key): # Disposition
-        cur_idx = self.prev_idx
-        cur_disposition = self.disposition[cur_idx]
+    def get_key(self, current_key):  # Disposition
+        cur_disposition = self.disposition
 
-        d_ratio = (cur_disposition + DISPOSITION_RANGE[1]) / (DISPOSITION_RANGE[1] - DISPOSITION_RANGE[0])
+        d_ratio = ((cur_disposition + DISPOSITION_RANGE[1]) /
+                   (DISPOSITION_RANGE[1] - DISPOSITION_RANGE[0]))
 
         if 0 <= d_ratio < 0.05:
             target_scale = 0
@@ -121,22 +133,23 @@ class LifeState():
 
         return octave
 
-    def get_volume(self): # Energy +/- Chaos
-        cur_energy = self.energy[self.prev_idx]
-        cur_chaos = self.chaos[self.prev_idx]
+    def get_volume(self):  # Energy +/- Chaos
+        cur_energy = self.energy
+        cur_chaos = self.chaos
 
-        e_ratio = (cur_energy + ENERGY_RANGE[1]) / (ENERGY_RANGE[1] - ENERGY_RANGE[0])
+        e_ratio = ((cur_energy + ENERGY_RANGE[1]) /
+                   (ENERGY_RANGE[1] - ENERGY_RANGE[0]))
 
         volume = e_ratio * (VOLUME_RANGE[1] - VOLUME_RANGE[0]) + VOLUME_RANGE[0]
         volume += cur_chaos / CHAOS_RANGE[1]
 
         return int(volume)
 
-    def get_dissonance(self): # Disposition
-        cur_disposition = self.disposition[self.prev_idx]
-        cur_chaos = self.chaos[self.prev_idx]
+    def get_dissonance(self):  # Disposition
+        cur_disposition = self.disposition
 
-        d_ratio = (cur_disposition + DISPOSITION_RANGE[1]) / (DISPOSITION_RANGE[1] - DISPOSITION_RANGE[0])
+        d_ratio = ((cur_disposition + DISPOSITION_RANGE[1]) /
+                   (DISPOSITION_RANGE[1] - DISPOSITION_RANGE[0]))
 
         dissonance = 0.1
         if 0 <= d_ratio < 0.1:
@@ -146,10 +159,11 @@ class LifeState():
 
         return dissonance
 
-    def get_length_ratio(self): # Energy +/- Chaos
-        cur_energy = self.energy[self.prev_idx]
+    def get_length_ratio(self):  # Energy +/- Chaos
+        cur_energy = self.energy
 
-        e_ratio = (cur_energy + ENERGY_RANGE[1]) / (ENERGY_RANGE[1] - ENERGY_RANGE[0])
+        e_ratio = ((cur_energy + ENERGY_RANGE[1]) /
+                   (ENERGY_RANGE[1] - ENERGY_RANGE[0]))
 
         if 0 <= e_ratio < 0.1:
             length_ratio = (1, 2)
@@ -163,4 +177,3 @@ class LifeState():
             length_ratio = (2, 1)
 
         return length_ratio
-

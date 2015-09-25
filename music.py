@@ -3,36 +3,41 @@ import random
 import threading
 import time
 from pygame import midi
-from state import LifeState
+
+DEBUG = False
 
 BASE_REST_CHANCE = 0.05
 PIANO = 0
 CELLO = 42
-CONSONANT = (0, 2, 4, 5) # root, 3rd, 5th, 6th
-DISSONANT = (1, 3, 6) # 2nd, 4th, 7th
-SCALES = ((0, 2, 4, 5, 7, 9, 11), # Major, high energy, high disposition
-          (0, 2, 3, 5, 7, 9, 10), # Dorian,
-          (0, 1, 3, 5, 7, 8, 10), # Phyrgian
-          (0, 2, 4, 6, 7, 9, 11), # Lydian
-          (0, 2, 4, 5, 7, 9, 10), # Mixolydian
-          (0, 2, 3, 5, 7, 8, 10), # Minor
-          (0, 1, 3, 5, 6, 8, 10)) # Locrian
+CONSONANT = (0, 2, 4, 5)  # root, 3rd, 5th, 6th
+DISSONANT = (1, 3, 6)  # 2nd, 4th, 7th
+SCALES = ((0, 2, 4, 5, 7, 9, 11),  # Major
+          (0, 2, 3, 5, 7, 9, 10),  # Dorian
+          (0, 1, 3, 5, 7, 8, 10),  # Phyrgian
+          (0, 2, 4, 6, 7, 9, 11),  # Lydian
+          (0, 2, 4, 5, 7, 9, 10),  # Mixolydian
+          (0, 2, 3, 5, 7, 8, 10),  # Minor
+          (0, 1, 3, 5, 6, 8, 10))  # Locrian
+
 
 class Player():
-    def __init__(self, state):
+    def __init__(self, state, debug=False):
+        global DEBUG
+        DEBUG = debug
+
         midi.init()
 
         self.notes = Queue.Queue()
         self.state = state
         self.player = midi.Output(2)
-        self.update_rate = 2 # secs
+        self.update_rate = 2  # secs
 
-        self.tempo = 90.0 # bpm
-        self.key = (0, 4) # C mix
-        self.octave = 0 # Middle
-        self.volume = 100 # Velocity
+        self.tempo = 90.0  # bpm
+        self.key = (0, 4)  # C mix
+        self.octave = 0  # Middle
+        self.volume = 100  # Velocity
         self.dissonance = 0.1
-        self.length_ratio = (1, 4) # 1:4
+        self.length_ratio = (1, 4)  # 1:4
 
         self.rest_chance = BASE_REST_CHANCE
 
@@ -45,7 +50,17 @@ class Player():
             self.dissonance = self.state.get_dissonance()
             self.length_ratio = self.state.get_length_ratio()
 
-            print(self.tempo, self.key, self.octave, self.volume, self.dissonance, self.length_ratio)
+            if DEBUG:
+                msg = ['Music update',
+                       "Tempo: {}".format(self.tempo),
+                       "Key: {}".format(self.key),
+                       "Octave: {}".format(self.octave),
+                       "Volume: {}".format(self.volume),
+                       "Dissonance: {}".format(self.dissonance),
+                       "Length Ratio: {}".format(self.length_ratio),
+                       '']
+                print('\n'.join(msg))
+
             time.sleep(self.update_rate)
 
     def play_song(self):
@@ -130,4 +145,3 @@ class Player():
         harmony = base_note + interval
 
         return (bass, harmony)
-
