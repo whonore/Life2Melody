@@ -1,10 +1,14 @@
-import Queue
+from __future__ import division
+
+try:
+    import Queue as queue
+except ImportError:
+    import queue
 import random
 import threading
 import time
-from pygame import midi
 
-DEBUG = False
+from pygame import midi
 
 BASE_REST_CHANCE = 0.05
 PIANO = 0
@@ -20,16 +24,16 @@ SCALES = ((0, 2, 4, 5, 7, 9, 11),  # Major
           (0, 1, 3, 5, 6, 8, 10))  # Locrian
 
 
-class Player():
+class Player(object):
     def __init__(self, state, debug=False):
-        global DEBUG
-        DEBUG = debug
+        self.debug = debug
 
         midi.init()
 
-        self.notes = Queue.Queue()
         self.state = state
         self.player = midi.Output(2)
+
+        self.notes = queue.Queue()
         self.update_rate = 2  # secs
 
         self.tempo = 90.0  # bpm
@@ -42,29 +46,29 @@ class Player():
         self.rest_chance = BASE_REST_CHANCE
 
     def update(self):
-        while True:
-            self.tempo = float(self.state.get_tempo(self.tempo))
-            self.key = self.state.get_key(self.key)
-            self.octave = self.state.get_octave(self.octave)
-            self.volume = self.state.get_volume()
-            self.dissonance = self.state.get_dissonance()
-            self.length_ratio = self.state.get_length_ratio()
+        self.tempo = self.state.get_tempo(self.tempo)
+        self.key = self.state.get_key(self.key)
+        self.octave = self.state.get_octave(self.octave)
+        self.volume = self.state.get_volume(self.volume)
+        self.dissonance = self.state.get_dissonance(self.dissonance)
+        self.length_ratio = self.state.get_length_ratio(self.length_ratio)
 
-            if DEBUG:
-                msg = ['Music update',
-                       "Tempo: {}".format(self.tempo),
-                       "Key: {}".format(self.key),
-                       "Octave: {}".format(self.octave),
-                       "Volume: {}".format(self.volume),
-                       "Dissonance: {}".format(self.dissonance),
-                       "Length Ratio: {}".format(self.length_ratio),
-                       '']
-                print('\n'.join(msg))
+        if self.debug:
+            msg = ['Music update',
+                   "Tempo: {}".format(self.tempo),
+                   "Key: {}".format(self.key),
+                   "Octave: {}".format(self.octave),
+                   "Volume: {}".format(self.volume),
+                   "Dissonance: {}".format(self.dissonance),
+                   "Length Ratio: {}".format(self.length_ratio),
+                   '']
+            print('\n'.join(msg))
 
-            time.sleep(self.update_rate)
+        threading.Timer(self.update_rate, self.update).start()
 
     def play_song(self):
-        threading.Thread(target=self.update).start()
+        self.update()
+
         melody_counter = 0
         harmony_counter = 0
 
@@ -80,17 +84,28 @@ class Player():
                 self.rest_chance += 0.005
                 melody_volume = self.volume
 
-            melody = (PIANO, self.choose_melody(), melody_duration, melody_volume)
-
-            bass, harmony = self.choose_harmony()
+            melody_note = self.choose_melody()
+            bass_note, harmony_note = self.choose_harmony()
             harmony_volume = self.volume - 10
+
+            melody = (PIANO,
+                      melody_note,
+                      melody_duration,
+                      melody_volume)
+            harmony = (CELLO,
+                       harmony_note,
+                       harmony_duration,
+                       harmony_volume)
+            bass = (CELLO,
+                    bass_note,
+                    harmony_duration,
+                    harmony_volume)
 
             notes = []
             if melody_counter == 0:
                 notes.append(melody)
             if harmony_counter == 0:
-                notes.extend([(CELLO, bass, harmony_duration, harmony_volume),
-                              (CELLO, harmony, harmony_duration, harmony_volume)])
+                notes.extend([bass, harmony])
 
             self.play_notes(notes)
 
@@ -106,11 +121,11 @@ class Player():
         self.player.set_instrument(instrument)
         self.player.note_on(note, volume)
         self.notes.put_nowait((note, volume, duration))
-        note_t = threading.Thread(target=self.stop_note)
-        note_t.start()
+
+        threading.Thread(target=self.stop_note).start()
 
     def stop_note(self):
-        note, velocity, duration = self.notes.get_nowait()
+        note, _, duration = self.notes.get_nowait()
         time.sleep(duration)
         self.player.note_on(note, 0)
         self.notes.task_done()
